@@ -7,6 +7,28 @@ from ..cache import redis_client
 from .logger import async_info, async_error, async_warning
 
 
+async def remove_cache_item(key: str):
+    try:
+        result = await asyncio.to_thread(redis_client.delete, key)
+        if result:
+            await async_info(f"Item removido do cache: {key}")
+        else:
+            await async_info(f"Item não encontrado no cache: {key}")
+    except Exception as e:
+        await async_error(f"Erro ao remover item do cache {key}: {str(e)}")
+
+
+async def remove_related_cache(path: str):
+    try:
+        pattern = f"cache:{path}*"
+        keys = await asyncio.to_thread(redis_client.keys, pattern)
+        if keys:
+            await asyncio.to_thread(redis_client.delete, *keys)
+            await async_info(f"Cache removido para o padrão: {pattern}")
+    except Exception as e:
+        await async_error(f"Erro ao remover cache para {path}: {str(e)}")
+
+
 def custom_cache(expire: int = 60):
     def decorator(func):
         @wraps(func)
@@ -14,6 +36,11 @@ def custom_cache(expire: int = 60):
             request = kwargs.get("request") or next((arg for arg in args if isinstance(arg, Request)), None)
             if not request or not isinstance(request, Request):
                 await async_warning(f"Request válido não encontrado para {func.__name__}. Cache desativado.")
+                return await func(*args, **kwargs)
+
+            # Para métodos de modificação, remover o cache relacionado e executar a função
+            if request.method in ["POST", "PATCH", "PUT", "DELETE"]:
+                await remove_related_cache(request.url.path)
                 return await func(*args, **kwargs)
 
             # Gerar uma chave base única para a rota

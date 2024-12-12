@@ -14,7 +14,7 @@ router = APIRouter()
 @custom_cache(expire=60)
 async def create_item(request: Request, item: base_schemas.ItemCreate, db: Session = Depends(get_db)):
     try:
-        db_item = base_models.Item(**item.dict())
+        db_item = base_models.Item(**item.model_dump())
         db.add(db_item)
         db.commit()
         db.refresh(db_item)
